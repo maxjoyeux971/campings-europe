@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1D9E75">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Campings EU">
+<title>Campings Europe</title>
+<link rel="manifest" href="manifest.json">
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<!-- Leaflet MarkerCluster CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body { font-family: 'Segoe UI', sans-serif; background: #f5f5f0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Barre du haut ── */
+  #topbar {
+    background: #1D9E75; color: white;
+    padding: 10px 14px; display: flex; align-items: center;
+    gap: 10px; flex-shrink: 0; z-index: 1000;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  }
+  #topbar h1 { font-size: 16px; font-weight: 600; flex: 1; }
+  #btn-refresh {
+    background: white; color: #1D9E75; border: none;
+    border-radius: 6px; padding: 6px 12px; font-size: 13px;
+    font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  #btn-refresh:disabled { opacity: 0.5; }
+
+  /* ── Barre de statut ── */
+  #statusbar {
+    background: #e8f5f0; color: #0F6E56;
+    padding: 6px 14px; font-size: 12px;
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0; min-height: 30px;
+  }
+  #progress-wrap { flex: 1; height: 4px; background: #b2dfdb; border-radius: 2px; overflow: hidden; }
+  #progress-bar  { height: 100%; background: #1D9E75; width: 0%; transition: width .3s; border-radius: 2px; }
+
+  /* ── Carte ── */
+  #map { flex: 1; width: 100%; }
+
+  /* ── Légende ── */
+  #legend {
+    position: absolute; bottom: 24px; left: 12px; z-index: 1000;
+    background: white; border-radius: 10px;
+    padding: 10px 14px; font-size: 12px; line-height: 1.9;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    display: none;
+  }
+  #legend b { font-size: 13px; }
+  #legend-toggle {
+    position: absolute; bottom: 24px; left: 12px; z-index: 1001;
+    background: white; border: none; border-radius: 8px;
+    padding: 7px 12px; font-size: 12px; font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2); cursor: pointer;
+    color: #1D9E75;
+  }
+
+  /* ── Popup ── */
+  .camping-popup { font-family: 'Segoe UI', sans-serif; font-size: 13px; min-width: 200px; }
+  .camping-popup b { font-size: 14px; }
+  .camping-popup hr { margin: 6px 0; border: none; border-top: 1px solid #eee; }
+  .popup-btn {
+    display: inline-block; background: #1D9E75; color: white;
+    padding: 5px 12px; border-radius: 4px; text-decoration: none;
+    font-size: 12px; margin-bottom: 4px;
+  }
+  .popup-muted { color: #999; font-size: 12px; }
+  .popup-stars { color: #f5a623; }
+
+  /* ── Splash écran ── */
+  #splash {
+    position: fixed; inset: 0; background: #1D9E75;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 9999; color: white; gap: 16px;
+  }
+  #splash h2 { font-size: 22px; }
+  #splash p  { font-size: 14px; opacity: .85; text-align: center; padding: 0 30px; }
+  .spinner {
+    width: 40px; height: 40px; border: 4px solid rgba(255,255,255,.3);
+    border-top-color: white; border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Splash -->
+<div id="splash">
+  <div style="font-size:48px">⛺</div>
+  <h2>Campings Europe</h2>
+  <div class="spinner"></div>
+  <p id="splash-msg">Chargement de la carte...</p>
+</div>
+
+<!-- Interface principale -->
+<div id="topbar">
+  <h1>⛺ Campings Europe</h1>
+  <button id="btn-refresh" onclick="loadCampings(true)">↻ Actualiser</button>
+</div>
+
+<div id="statusbar">
+  <span id="status-text">Initialisation...</span>
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <span id="status-count"></span>
+</div>
+
+<div id="map"></div>
+
+<button id="legend-toggle" onclick="toggleLegend()">📋 Légende</button>
+<div id="legend">
+  <b>Classement</b><br>
+  <span style="color:#2ca02c">●</span> Municipal<br>
+  <span style="color:#c8b400">●</span> 1 étoile<br>
+  <span style="color:#f57c00">●</span> 2 étoiles<br>
+  <span style="color:#d32f2f">●</span> 3 étoiles<br>
+  <span style="color:#7b1a1a">●</span> 4 étoiles<br>
+  <span style="color:#222">●</span> 5 étoiles<br>
+  <span style="color:#aaa">●</span> Non classé<br>
+  <hr>
+  <span id="legend-count" style="color:#555"></span>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+
+<script>
+// ── Constantes ────────────────────────────────────────────────────────────────
+const CACHE_KEY     = 'campings_europe_v1';
+const CACHE_HOURS   = 48;
+const OVERPASS_SERVERS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+// Europe découpée en 28 zones
+const ZONES = [
+  ["Espagne O",           36.0, -9.5, 44.0, -3.0],
+  ["Espagne E+Portugal",  36.0, -3.0, 44.0,  4.5],
+  ["France NO",           48.0, -5.0, 51.2,  1.5],
+  ["France NE",           48.0,  1.5, 51.2,  8.5],
+  ["France SO",           42.3, -5.0, 48.0,  1.5],
+  ["France SE",           42.3,  1.5, 48.0,  8.5],
+  ["Angleterre S",        50.0, -6.0, 53.5,  2.0],
+  ["Angleterre N+Ecosse", 53.5, -8.0, 59.0,  2.0],
+  ["Irlande",             51.0,-11.0, 55.5, -5.5],
+  ["Benelux",             49.5,  2.0, 53.5,  7.5],
+  ["Allemagne NO",        52.0,  7.5, 55.5, 12.0],
+  ["Allemagne SO",        47.0,  7.5, 52.0, 12.0],
+  ["Allemagne E",         47.0, 12.0, 55.5, 15.5],
+  ["Danemark",            54.5,  8.0, 58.0, 13.0],
+  ["Scandinavie SO",      57.0,  4.5, 63.0, 12.0],
+  ["Scandinavie SE",      57.0, 12.0, 63.0, 20.0],
+  ["Scandinavie N",       63.0,  5.0, 71.5, 30.0],
+  ["Finlande",            59.5, 20.0, 70.5, 31.5],
+  ["Autriche+Suisse",     46.0,  6.0, 48.5, 17.5],
+  ["Pologne",             49.0, 14.0, 55.0, 24.5],
+  ["Pays Baltes",         53.5, 20.0, 59.5, 28.5],
+  ["Tcheq+Slovaquie",     47.5, 12.5, 51.5, 22.5],
+  ["Italie N",            43.5,  6.5, 47.5, 14.0],
+  ["Italie S",            37.5,  6.5, 43.5, 16.5],
+  ["Balkans O",           40.0, 13.5, 46.5, 20.5],
+  ["Balkans E",           40.0, 20.5, 46.5, 30.0],
+  ["Grece",               34.5, 19.5, 42.0, 28.5],
+  ["Roumanie+Bulgarie",   43.0, 22.0, 48.5, 30.5],
+];
+
+// ── Couleurs marqueurs ────────────────────────────────────────────────────────
+const COLORS = {
+  municipal: { hex: '#2ca02c', css: 'color:#2ca02c' },
+  s1:        { hex: '#c8b400', css: 'color:#c8b400' },
+  s2:        { hex: '#f57c00', css: 'color:#f57c00' },
+  s3:        { hex: '#d32f2f', css: 'color:#d32f2f' },
+  s4:        { hex: '#7b1a1a', css: 'color:#7b1a1a' },
+  s5:        { hex: '#222222', css: 'color:#222' },
+  none:      { hex: '#aaaaaa', css: 'color:#aaa' },
+};
+
+function getColorKey(stars, operator) {
+  const op = (operator || '').toLowerCase();
+  if (['municipal','commune','mairie','gemeinde','ayuntamiento'].some(k => op.includes(k))) return 'municipal';
+  return { '1':'s1','2':'s2','3':'s3','4':'s4','5':'s5' }[String(stars).trim()] || 'none';
+}
+
+function makeIcon(colorKey) {
+  const hex = COLORS[colorKey].hex;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="28" height="40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z"
+          fill="${hex}" stroke="white" stroke-width="1.5"/>
+    <text x="14" y="19" text-anchor="middle" font-size="13" fill="white">⛺</text>
+  </svg>`;
+  return L.divIcon({
+    html: svg, className: '', iconSize: [28, 40], iconAnchor: [14, 40], popupAnchor: [0, -38]
+  });
+}
+
+function makePopup(c) {
+  const stars = c.stars ? '⭐'.repeat(Math.min(parseInt(c.stars)||0, 5)) : '';
+  const site = c.website
+    ? `<a href="${c.website.startsWith('http') ? c.website : 'https://'+c.website}"
+          target="_blank" class="popup-btn">🌐 Visiter le site</a>`
+    : `<span class="popup-muted">🚫 Pas de site disponible</span>`;
+  const tel = c.phone
+    ? `<a href="tel:${c.phone}" style="color:#1D9E75;font-size:12px">📞 ${c.phone}</a>`
+    : `<span class="popup-muted">📞 Téléphone non renseigné</span>`;
+  const cap = c.capacite ? `<br><span class="popup-muted">🏕 ${c.capacite} emplacements</span>` : '';
+  return `<div class="camping-popup">
+    <b>${c.name}</b><br>
+    ${stars ? `<span class="popup-stars">${stars}</span><br>` : ''}
+    ${c.operator ? `<span class="popup-muted">${c.operator}</span><br>` : ''}
+    <hr>${site}<br>${tel}${cap}
+  </div>`;
+}
+
+// ── Carte Leaflet ─────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([48.0, 10.0], 5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+}).addTo(map);
+
+const cluster = L.markerClusterGroup({ maxClusterRadius: 60, disableClusteringAtZoom: 12 });
+map.addLayer(cluster);
+
+// ── Cache localStorage ────────────────────────────────────────────────────────
+function saveCache(campings) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), campings }));
+  } catch(e) { console.warn('Cache save failed:', e); }
+}
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const ageH = (Date.now() - data.ts) / 3600000;
+    if (ageH < CACHE_HOURS) return { campings: data.campings, ageH };
+  } catch(e) {}
+  return null;
+}
+
+// ── Requête Overpass ──────────────────────────────────────────────────────────
+async function queryOverpass(query, serverIdx = 0) {
+  if (serverIdx >= OVERPASS_SERVERS.length) return [];
+  try {
+    const resp = await fetch(OVERPASS_SERVERS[serverIdx], {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(query),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    return json.elements || [];
+  } catch(e) {
+    return queryOverpass(query, serverIdx + 1);
+  }
+}
+
+function makeQuery(s, w, n, e) {
+  return `[out:json][timeout:60];(node["tourism"="camp_site"](${s},${w},${n},${e});way["tourism"="camp_site"](${s},${w},${n},${e}););out center tags qt;`;
+}
+
+// ── Affichage des marqueurs ───────────────────────────────────────────────────
+function displayCampings(campings) {
+  cluster.clearLayers();
+  campings.forEach(c => {
+    const ck = getColorKey(c.stars, c.operator);
+    L.marker([c.lat, c.lon], { icon: makeIcon(ck) })
+      .bindPopup(makePopup(c), { maxWidth: 260 })
+      .bindTooltip(c.name, { direction: 'top' })
+      .addTo(cluster);
+  });
+  document.getElementById('status-count').textContent = campings.length + ' campings';
+  document.getElementById('legend-count').textContent = campings.length + ' campings au total';
+}
+
+// ── Chargement principal ──────────────────────────────────────────────────────
+async function loadCampings(force = false) {
+  document.getElementById('btn-refresh').disabled = true;
+
+  // Cache ?
+  if (!force) {
+    const cached = loadCache();
+    if (cached) {
+      setStatus(`Cache (${cached.campings.length} campings, ${cached.ageH.toFixed(0)}h) — affichage...`);
+      setProgress(100);
+      displayCampings(cached.campings);
+      hideSplash();
+      document.getElementById('btn-refresh').disabled = false;
+      return;
+    }
+  }
+
+  // Téléchargement zone par zone
+  const allCampings = {};
+  for (let i = 0; i < ZONES.length; i++) {
+    const [label, s, w, n, e] = ZONES[i];
+    const pct = Math.round((i / ZONES.length) * 100);
+    setStatus(`Zone ${i+1}/${ZONES.length} : ${label}...`);
+    setProgress(pct);
+
+    const elements = await queryOverpass(makeQuery(s, w, n, e));
+    await sleep(1500);
+
+    elements.forEach(el => {
+      const tags = el.tags || {};
+      let lat, lon;
+      if (el.type === 'node') { lat = el.lat; lon = el.lon; }
+      else if (el.center)     { lat = el.center.lat; lon = el.center.lon; }
+      else return;
+
+      const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+      allCampings[key] = {
+        name:     tags.name     || 'Camping sans nom',
+        lat, lon,
+        website:  tags.website  || tags['contact:website'] || tags.url || '',
+        phone:    tags.phone    || tags['contact:phone']   || tags.telephone || '',
+        stars:    tags.stars    || '',
+        operator: tags.operator || '',
+        capacite: tags.capacity || '',
+      };
+    });
+  }
+
+  const campings = Object.values(allCampings);
+  setProgress(100);
+  setStatus(`${campings.length} campings chargés — affichage...`);
+  saveCache(campings);
+  displayCampings(campings);
+  hideSplash();
+  document.getElementById('btn-refresh').disabled = false;
+}
+
+// ── Utilitaires ───────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
+function setProgress(pct) { document.getElementById('progress-bar').style.width = pct + '%'; }
+function hideSplash() {
+  const s = document.getElementById('splash');
+  s.style.transition = 'opacity .5s';
+  s.style.opacity = '0';
+  setTimeout(() => s.style.display = 'none', 500);
+}
+
+let legendVisible = false;
+function toggleLegend() {
+  legendVisible = !legendVisible;
+  document.getElementById('legend').style.display = legendVisible ? 'block' : 'none';
+  document.getElementById('legend-toggle').style.display = legendVisible ? 'none' : 'block';
+}
+
+// ── Service Worker ──
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(()=>{});
+}
+
+// ── Démarrage ─────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Met à jour le message splash pendant le chargement
+  const msgs = ['Connexion à OpenStreetMap...','Téléchargement des campings...','Patience, grande zone de recherche...'];
+  let mi = 0;
+  const iv = setInterval(() => {
+    document.getElementById('splash-msg').textContent = msgs[Math.min(mi++, msgs.length-1)];
+  }, 4000);
+  loadCampings().then(() => clearInterval(iv));
+});
+</script>
+</body>
+</html>
