@@ -17,11 +17,9 @@
   body { font-family:'Segoe UI',sans-serif; background:#f5f5f0; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
   #topbar { background:#1D9E75; color:white; padding:10px 14px; display:flex; align-items:center; gap:10px; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,.2); }
   #topbar h1 { font-size:16px; font-weight:600; flex:1; }
-  #btn-refresh { background:white; color:#1D9E75; border:none; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
-  #btn-refresh:disabled { opacity:0.5; }
   #statusbar { background:#e8f5f0; color:#0F6E56; padding:6px 14px; font-size:12px; display:flex; align-items:center; gap:8px; flex-shrink:0; min-height:30px; }
   #progress-wrap { flex:1; height:4px; background:#b2dfdb; border-radius:2px; overflow:hidden; }
-  #progress-bar { height:100%; background:#1D9E75; width:0%; transition:width .3s; border-radius:2px; }
+  #progress-bar { height:100%; background:#1D9E75; width:0%; transition:width .5s; border-radius:2px; }
   #map { flex:1; width:100%; }
   #legend { position:absolute; bottom:24px; left:12px; z-index:1000; background:white; border-radius:10px; padding:10px 14px; font-size:12px; line-height:1.9; box-shadow:0 2px 8px rgba(0,0,0,.2); display:none; }
   #legend b { font-size:13px; }
@@ -37,8 +35,9 @@
   #splash p { font-size:13px; opacity:.85; text-align:center; padding:0 30px; }
   .spinner { width:40px; height:40px; border:4px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  #error-box { display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:white; border-radius:12px; padding:20px 24px; box-shadow:0 4px 20px rgba(0,0,0,.2); z-index:2000; text-align:center; max-width:300px; }
-  #error-box button { background:#1D9E75; color:white; border:none; border-radius:6px; padding:8px 20px; margin-top:12px; font-size:14px; cursor:pointer; }
+  #error-box { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; align-items:center; justify-content:center; }
+  #error-inner { background:white; border-radius:12px; padding:24px; max-width:300px; text-align:center; margin:20px; }
+  #error-inner button { background:#1D9E75; color:white; border:none; border-radius:6px; padding:8px 20px; margin-top:12px; font-size:14px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -47,20 +46,19 @@
   <div style="font-size:48px">⛺</div>
   <h2>Campings Europe</h2>
   <div class="spinner"></div>
-  <p id="splash-msg">Connexion à OpenStreetMap...</p>
-  <p id="splash-detail" style="font-size:11px;opacity:.6"></p>
+  <p id="splash-msg">Chargement des données...</p>
 </div>
 
 <div id="topbar">
   <h1>⛺ Campings Europe</h1>
-  <button id="btn-refresh" onclick="loadCampings(true)">↻ Actualiser</button>
 </div>
 <div id="statusbar">
-  <span id="status-text">Initialisation...</span>
+  <span id="status-text">Chargement...</span>
   <div id="progress-wrap"><div id="progress-bar"></div></div>
   <span id="status-count" style="white-space:nowrap"></span>
 </div>
 <div id="map"></div>
+
 <button id="legend-toggle" onclick="toggleLegend()">📋 Légende</button>
 <div id="legend">
   <b>Classement</b><br>
@@ -74,252 +72,163 @@
   <hr style="margin:6px 0">
   <span id="legend-count" style="color:#555"></span>
 </div>
+
 <div id="error-box">
-  <div style="font-size:32px">⚠️</div>
-  <p id="error-msg" style="margin-top:8px;font-size:14px;color:#333"></p>
-  <button onclick="retryLoad()">Réessayer</button>
+  <div id="error-inner">
+    <div style="font-size:32px">⚠️</div>
+    <p id="error-msg" style="margin-top:8px;font-size:14px;color:#333"></p>
+    <button onclick="location.reload()">Réessayer</button>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <script>
 
-// ── Configuration ─────────────────────────────────────────────────────────────
-const CACHE_KEY   = 'campings_europe_v2';
-const CACHE_HOURS = 48;
+// ── URL du fichier JSON sur GitHub ────────────────────────────────────────────
+// Le fichier campings_europe_cache.json est dans votre dépôt GitHub
+const DATA_URL = './campings_europe_cache.json';
 
-// Serveurs Overpass avec CORS ouvert
-const SERVERS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-  'https://overpass.openstreetmap.ru/api/interpreter',
-];
-
-// 28 zones Europe
-const ZONES = [
-  ["Espagne O",           36.0, -9.5, 44.0, -3.0],
-  ["Espagne E+Portugal",  36.0, -3.0, 44.0,  4.5],
-  ["France NO",           48.0, -5.0, 51.2,  1.5],
-  ["France NE",           48.0,  1.5, 51.2,  8.5],
-  ["France SO",           42.3, -5.0, 48.0,  1.5],
-  ["France SE",           42.3,  1.5, 48.0,  8.5],
-  ["Angleterre S",        50.0, -6.0, 53.5,  2.0],
-  ["Angleterre N+Ecosse", 53.5, -8.0, 59.0,  2.0],
-  ["Irlande",             51.0,-11.0, 55.5, -5.5],
-  ["Benelux",             49.5,  2.0, 53.5,  7.5],
-  ["Allemagne NO",        52.0,  7.5, 55.5, 12.0],
-  ["Allemagne SO",        47.0,  7.5, 52.0, 12.0],
-  ["Allemagne E",         47.0, 12.0, 55.5, 15.5],
-  ["Danemark",            54.5,  8.0, 58.0, 13.0],
-  ["Scandinavie SO",      57.0,  4.5, 63.0, 12.0],
-  ["Scandinavie SE",      57.0, 12.0, 63.0, 20.0],
-  ["Scandinavie N",       63.0,  5.0, 71.5, 30.0],
-  ["Finlande",            59.5, 20.0, 70.5, 31.5],
-  ["Autriche+Suisse",     46.0,  6.0, 48.5, 17.5],
-  ["Pologne",             49.0, 14.0, 55.0, 24.5],
-  ["Pays Baltes",         53.5, 20.0, 59.5, 28.5],
-  ["Tcheq+Slovaquie",     47.5, 12.5, 51.5, 22.5],
-  ["Italie N",            43.5,  6.5, 47.5, 14.0],
-  ["Italie S",            37.5,  6.5, 43.5, 16.5],
-  ["Balkans O",           40.0, 13.5, 46.5, 20.5],
-  ["Balkans E",           40.0, 20.5, 46.5, 30.0],
-  ["Grece",               34.5, 19.5, 42.0, 28.5],
-  ["Roumanie+Bulgarie",   43.0, 22.0, 48.5, 30.5],
-];
-
-// ── Couleurs ──────────────────────────────────────────────────────────────────
+// ── Couleurs marqueurs ────────────────────────────────────────────────────────
 function getColorKey(stars, operator) {
   const op = (operator||'').toLowerCase();
   if (['municipal','commune','mairie','gemeinde','ayuntamiento'].some(k=>op.includes(k))) return 'municipal';
-  return {'1':'s1','2':'s2','3':'s3','4':'s4','5':'s5'}[String(stars).trim()]||'none';
+  return {'1':'s1','2':'s2','3':'s3','4':'s4','5':'s5'}[String(stars||'').trim()] || 'none';
 }
-const HEX = { municipal:'#2ca02c', s1:'#c8b400', s2:'#f57c00', s3:'#d32f2f', s4:'#7b1a1a', s5:'#222222', none:'#aaaaaa' };
+const HEX = {
+  municipal:'#2ca02c', s1:'#c8b400', s2:'#f57c00',
+  s3:'#d32f2f', s4:'#7b1a1a', s5:'#222222', none:'#aaaaaa'
+};
 
 function makeIcon(ck) {
-  const hex = HEX[ck]||'#aaa';
+  const hex = HEX[ck] || '#aaa';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="28" height="40">
-    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${hex}" stroke="white" stroke-width="1.5"/>
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z"
+          fill="${hex}" stroke="white" stroke-width="1.5"/>
     <text x="14" y="19" text-anchor="middle" font-size="13" fill="white">⛺</text></svg>`;
   return L.divIcon({ html:svg, className:'', iconSize:[28,40], iconAnchor:[14,40], popupAnchor:[0,-38] });
 }
 
 function makePopup(c) {
-  const stars = c.stars ? '⭐'.repeat(Math.min(parseInt(c.stars)||0,5)) : '';
-  const site  = c.website
-    ? `<a href="${c.website.startsWith('http')?c.website:'https://'+c.website}" target="_blank" class="popup-btn">🌐 Visiter le site</a>`
+  // Compatible avec les deux formats : cache OSM et cache Windows
+  const name     = c.name     || c.Name     || 'Camping sans nom';
+  const website  = c.website  || c.Website  || '';
+  const phone    = c.phone    || c.Phone    || '';
+  const stars    = c.stars    || c.Stars    || '';
+  const operator = c.operator || c.Operator || c.Category || '';
+  const city     = c.city     || c.City     || '';
+  const address  = c.address  || c.Address  || '';
+  const capacite = c.capacite || c.Capacity || '';
+
+  const starsHtml = stars && !isNaN(parseInt(stars))
+    ? `<span class="popup-stars">${'⭐'.repeat(Math.min(parseInt(stars),5))}</span><br>` : '';
+  const siteHtml = website
+    ? `<a href="${website.startsWith('http')?website:'https://'+website}" target="_blank" class="popup-btn">🌐 Visiter le site</a>`
     : `<span class="popup-muted">🚫 Pas de site disponible</span>`;
-  const tel   = c.phone
-    ? `<a href="tel:${c.phone}" style="color:#1D9E75;font-size:12px">📞 ${c.phone}</a>`
+  const telHtml = phone
+    ? `<a href="tel:${phone}" style="color:#1D9E75;font-size:12px">📞 ${phone}</a>`
     : `<span class="popup-muted">📞 Téléphone non renseigné</span>`;
-  const cap   = c.capacite ? `<br><span class="popup-muted">🏕 ${c.capacite} emplacements</span>` : '';
+  const cityHtml    = city     ? `<span class="popup-muted">📍 ${city}</span><br>`              : '';
+  const addressHtml = address  ? `<span class="popup-muted">🏠 ${address}</span><br>`           : '';
+  const capHtml     = capacite ? `<span class="popup-muted">🏕 ${capacite} emplacements</span>` : '';
+
   return `<div class="camping-popup">
-    <b>${c.name}</b><br>
-    ${stars?`<span class="popup-stars">${stars}</span><br>`:''}
-    ${c.operator?`<span class="popup-muted">${c.operator}</span><br>`:''}
-    <hr>${site}<br>${tel}${cap}</div>`;
+    <b>${name}</b><br>
+    ${starsHtml}
+    ${operator ? `<span class="popup-muted">${operator}</span><br>` : ''}
+    ${cityHtml}${addressHtml}
+    <hr>${siteHtml}<br>${telHtml}
+    ${capHtml ? '<br>'+capHtml : ''}
+  </div>`;
 }
 
-// ── Carte ─────────────────────────────────────────────────────────────────────
-const map = L.map('map',{zoomControl:true}).setView([48.0,10.0],5);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19
+// ── Carte Leaflet ─────────────────────────────────────────────────────────────
+const map = L.map('map', {zoomControl:true}).setView([48.0, 10.0], 5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom:19
 }).addTo(map);
+
 const cluster = L.markerClusterGroup({maxClusterRadius:60, disableClusteringAtZoom:12});
 map.addLayer(cluster);
 
-// ── Cache ─────────────────────────────────────────────────────────────────────
-function saveCache(campings) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), campings})); }
-  catch(e) { console.warn('Cache plein, on continue sans cache'); }
-}
-function loadCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if ((Date.now()-data.ts)/3600000 < CACHE_HOURS) return data;
-  } catch(e) {}
-  return null;
-}
-
-// ── Requête Overpass avec retry sur tous les serveurs ─────────────────────────
-async function queryOverpass(query) {
-  for (const server of SERVERS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const ctrl = new AbortController();
-        const tid  = setTimeout(()=>ctrl.abort(), 70000);
-        const resp = await fetch(server, {
-          method : 'POST',
-          headers: { 'Content-Type':'application/x-www-form-urlencoded' },
-          body   : 'data=' + encodeURIComponent(query),
-          signal : ctrl.signal,
-        });
-        clearTimeout(tid);
-        if (!resp.ok) throw new Error('HTTP '+resp.status);
-        const json = await resp.json();
-        return json.elements || [];
-      } catch(e) {
-        await sleep(2000);
-      }
-    }
-  }
-  return []; // zone ignorée si tous les serveurs échouent
-}
-
-function makeQuery(s,w,n,e) {
-  return `[out:json][timeout:60];(node["tourism"="camp_site"](${s},${w},${n},${e});way["tourism"="camp_site"](${s},${w},${n},${e}););out center tags qt;`;
-}
-
-// ── Affichage ─────────────────────────────────────────────────────────────────
+// ── Affichage des marqueurs ───────────────────────────────────────────────────
 function displayCampings(campings) {
   cluster.clearLayers();
-  campings.forEach(c => {
-    L.marker([c.lat,c.lon],{icon:makeIcon(getColorKey(c.stars,c.operator))})
-      .bindPopup(makePopup(c),{maxWidth:260})
-      .bindTooltip(c.name,{direction:'top'})
-      .addTo(cluster);
-  });
-  const n = campings.length;
-  document.getElementById('status-count').textContent  = n+' campings';
-  document.getElementById('legend-count').textContent  = n+' campings au total';
-}
+  let done = 0;
+  const total = campings.length;
 
-// ── Chargement principal ──────────────────────────────────────────────────────
-async function loadCampings(force=false) {
-  document.getElementById('btn-refresh').disabled = true;
-  document.getElementById('error-box').style.display = 'none';
+  // Ajout par lots pour ne pas bloquer l'interface
+  function addBatch(start) {
+    const end = Math.min(start + 500, total);
+    for (let i = start; i < end; i++) {
+      const c = campings[i];
+      const lat = c.lat || c.Latitude;
+      const lon = c.lon || c.Longitude;
+      if (!lat || !lon) continue;
+      const stars    = c.stars    || c.Stars    || '';
+      const operator = c.operator || c.Operator || c.Category || '';
+      L.marker([lat, lon], {icon: makeIcon(getColorKey(stars, operator))})
+        .bindPopup(makePopup(c), {maxWidth:260})
+        .bindTooltip(c.name || c.Name || '', {direction:'top'})
+        .addTo(cluster);
+    }
+    done = end;
+    const pct = Math.round((done/total)*100);
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('status-count').textContent = done + ' / ' + total;
 
-  // Cache ?
-  if (!force) {
-    const cached = loadCache();
-    if (cached) {
-      const ageH = ((Date.now()-cached.ts)/3600000).toFixed(0);
-      setStatus(`Cache (${cached.campings.length} campings, ${ageH}h) — affichage...`);
-      setProgress(100);
-      displayCampings(cached.campings);
+    if (done < total) {
+      setTimeout(() => addBatch(done), 0);
+    } else {
+      // Terminé
+      document.getElementById('status-text').textContent = `✅ ${total} campings chargés`;
+      document.getElementById('status-count').textContent = total + ' campings';
+      document.getElementById('legend-count').textContent = total + ' campings au total';
       hideSplash();
-      document.getElementById('btn-refresh').disabled = false;
-      return;
     }
   }
+  addBatch(0);
+}
 
-  // Téléchargement zone par zone
-  const all = {};
-  let loaded = 0;
+// ── Chargement du fichier JSON ────────────────────────────────────────────────
+async function loadData() {
+  try {
+    document.getElementById('splash-msg').textContent = 'Téléchargement des données...';
+    document.getElementById('progress-bar').style.width = '20%';
 
-  for (let i=0; i<ZONES.length; i++) {
-    const [label,s,w,n,e] = ZONES[i];
-    const pct = Math.round((i/ZONES.length)*100);
-    setStatus(`Zone ${i+1}/${ZONES.length} : ${label}...`);
-    setSplashMsg(`Téléchargement zone ${i+1}/${ZONES.length}`, label);
-    setProgress(pct);
+    const resp = await fetch(DATA_URL + '?v=' + Date.now());
+    if (!resp.ok) throw new Error('Fichier non trouvé (HTTP ' + resp.status + ')');
 
-    const elements = await queryOverpass(makeQuery(s,w,n,e));
-    await sleep(1500);
+    document.getElementById('splash-msg').textContent = 'Lecture des données...';
+    document.getElementById('progress-bar').style.width = '50%';
 
-    elements.forEach(el => {
-      const tags = el.tags||{};
-      let lat,lon;
-      if (el.type==='node')     { lat=el.lat;        lon=el.lon; }
-      else if (el.center)       { lat=el.center.lat; lon=el.center.lon; }
-      else return;
-      const key = lat.toFixed(5)+','+lon.toFixed(5);
-      all[key] = {
-        name    : tags.name     || 'Camping sans nom',
-        lat, lon,
-        website : tags.website  || tags['contact:website'] || tags.url       || '',
-        phone   : tags.phone    || tags['contact:phone']   || tags.telephone || '',
-        stars   : tags.stars    || '',
-        operator: tags.operator || '',
-        capacite: tags.capacity || '',
-      };
-    });
+    const raw = await resp.json();
 
-    loaded = Object.keys(all).length;
-    document.getElementById('status-count').textContent = loaded+' campings';
+    // Compatible cache Windows ({"timestamp":..., "campings":[...]}) et liste directe
+    const campings = Array.isArray(raw) ? raw : (raw.campings || []);
+
+    if (campings.length === 0) throw new Error('Aucun camping dans le fichier.');
+
+    document.getElementById('splash-msg').textContent = `Affichage de ${campings.length} campings...`;
+    document.getElementById('progress-bar').style.width = '70%';
+    document.getElementById('status-text').textContent = `Affichage de ${campings.length} campings...`;
+
+    displayCampings(campings);
+
+  } catch(err) {
+    hideSplash();
+    document.getElementById('error-msg').textContent = err.message;
+    document.getElementById('error-box').style.display = 'flex';
+    console.error(err);
   }
-
-  setProgress(100);
-  const campings = Object.values(all);
-
-  if (campings.length === 0) {
-    showError("Aucun camping récupéré.\nVérifiez votre connexion internet et réessayez.");
-    document.getElementById('btn-refresh').disabled = false;
-    return;
-  }
-
-  setStatus(`Construction de la carte (${campings.length} campings)...`);
-  saveCache(campings);
-  displayCampings(campings);
-  hideSplash();
-  setStatus(`✅ ${campings.length} campings chargés.`);
-  document.getElementById('btn-refresh').disabled = false;
 }
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
-function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
-function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
-function setProgress(p) { document.getElementById('progress-bar').style.width = p+'%'; }
-function setSplashMsg(line1, line2='') {
-  document.getElementById('splash-msg').textContent    = line1;
-  document.getElementById('splash-detail').textContent = line2;
-}
 function hideSplash() {
   const s = document.getElementById('splash');
   s.style.transition = 'opacity .5s';
-  s.style.opacity    = '0';
-  setTimeout(()=>s.style.display='none', 500);
-}
-function showError(msg) {
-  hideSplash();
-  document.getElementById('error-msg').textContent  = msg;
-  document.getElementById('error-box').style.display = 'block';
-}
-function retryLoad() {
-  document.getElementById('error-box').style.display = 'none';
-  loadCampings(true);
+  s.style.opacity = '0';
+  setTimeout(() => s.style.display = 'none', 500);
 }
 
 let legendVisible = false;
@@ -335,7 +244,7 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Démarrage ─────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => loadCampings());
+document.addEventListener('DOMContentLoaded', loadData);
 
 </script>
 </body>
