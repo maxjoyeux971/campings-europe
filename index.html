@@ -15,26 +15,49 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:'Segoe UI',sans-serif; background:#f5f5f0; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
-  #topbar { background:#1D9E75; color:white; padding:10px 14px; display:flex; align-items:center; gap:10px; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,.2); }
-  #topbar h1 { font-size:16px; font-weight:600; flex:1; }
-  #statusbar { background:#e8f5f0; color:#0F6E56; padding:6px 14px; font-size:12px; display:flex; align-items:center; gap:8px; flex-shrink:0; min-height:30px; }
-  #progress-wrap { flex:1; height:4px; background:#b2dfdb; border-radius:2px; overflow:hidden; }
+
+  #topbar { background:#1D9E75; color:white; padding:8px 14px; display:flex; align-items:center; gap:10px; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  #topbar h1 { font-size:15px; font-weight:600; flex:1; }
+
+  /* Barre de filtres */
+  #filterbar {
+    background:#f0faf5; border-bottom:1px solid #c8e6c9;
+    padding:8px 12px; display:flex; flex-wrap:wrap;
+    gap:6px; align-items:center; flex-shrink:0;
+  }
+  .filter-label { font-size:11px; color:#0F6E56; font-weight:600; white-space:nowrap; }
+  .filter-btn {
+    border:1.5px solid #1D9E75; background:white; color:#1D9E75;
+    border-radius:20px; padding:4px 11px; font-size:12px; cursor:pointer;
+    white-space:nowrap; transition:all .15s;
+  }
+  .filter-btn.active { background:#1D9E75; color:white; }
+  .filter-sep { width:1px; height:20px; background:#c8e6c9; margin:0 2px; }
+  #filter-count { font-size:11px; color:#888; margin-left:auto; white-space:nowrap; }
+
+  #statusbar { background:#e8f5f0; color:#0F6E56; padding:5px 14px; font-size:12px; display:flex; align-items:center; gap:8px; flex-shrink:0; min-height:26px; }
+  #progress-wrap { flex:1; height:3px; background:#b2dfdb; border-radius:2px; overflow:hidden; }
   #progress-bar { height:100%; background:#1D9E75; width:0%; transition:width .5s; border-radius:2px; }
+
   #map { flex:1; width:100%; }
+
   #legend { position:absolute; bottom:24px; left:12px; z-index:1000; background:white; border-radius:10px; padding:10px 14px; font-size:12px; line-height:1.9; box-shadow:0 2px 8px rgba(0,0,0,.2); display:none; }
   #legend b { font-size:13px; }
   #legend-toggle { position:absolute; bottom:24px; left:12px; z-index:1001; background:white; border:none; border-radius:8px; padding:7px 12px; font-size:12px; font-weight:600; box-shadow:0 2px 6px rgba(0,0,0,.2); cursor:pointer; color:#1D9E75; }
+
   .camping-popup { font-family:'Segoe UI',sans-serif; font-size:13px; min-width:200px; }
   .camping-popup b { font-size:14px; }
   .camping-popup hr { margin:6px 0; border:none; border-top:1px solid #eee; }
   .popup-btn { display:inline-block; background:#1D9E75; color:white; padding:5px 12px; border-radius:4px; text-decoration:none; font-size:12px; margin-bottom:4px; }
   .popup-muted { color:#999; font-size:12px; }
   .popup-stars { color:#f5a623; }
+
   #splash { position:fixed; inset:0; background:#1D9E75; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; color:white; gap:16px; }
   #splash h2 { font-size:22px; }
   #splash p { font-size:13px; opacity:.85; text-align:center; padding:0 30px; }
   .spinner { width:40px; height:40px; border:4px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
   #error-box { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; align-items:center; justify-content:center; }
   #error-inner { background:white; border-radius:12px; padding:24px; max-width:300px; text-align:center; margin:20px; }
   #error-inner button { background:#1D9E75; color:white; border:none; border-radius:6px; padding:8px 20px; margin-top:12px; font-size:14px; cursor:pointer; }
@@ -52,11 +75,34 @@
 <div id="topbar">
   <h1>⛺ Campings Europe</h1>
 </div>
+
+<!-- Barre de filtres -->
+<div id="filterbar">
+  <span class="filter-label">Avec site :</span>
+  <button class="filter-btn active" id="f-site-all"  onclick="setFilter('site','all')">Tous</button>
+  <button class="filter-btn"        id="f-site-yes"  onclick="setFilter('site','yes')">✅ Avec site</button>
+  <button class="filter-btn"        id="f-site-no"   onclick="setFilter('site','no')">🚫 Sans site</button>
+
+  <div class="filter-sep"></div>
+  <span class="filter-label">Étoiles :</span>
+  <button class="filter-btn active" id="f-stars-all" onclick="setFilter('stars','all')">Toutes</button>
+  <button class="filter-btn"        id="f-stars-1"   onclick="setFilter('stars','1')">1★</button>
+  <button class="filter-btn"        id="f-stars-2"   onclick="setFilter('stars','2')">2★</button>
+  <button class="filter-btn"        id="f-stars-3"   onclick="setFilter('stars','3')">3★</button>
+  <button class="filter-btn"        id="f-stars-4"   onclick="setFilter('stars','4')">4★</button>
+  <button class="filter-btn"        id="f-stars-5"   onclick="setFilter('stars','5')">5★</button>
+
+  <div class="filter-sep"></div>
+  <button class="filter-btn" id="f-municipal" onclick="toggleMunicipal()">🏛 Municipal</button>
+
+  <span id="filter-count"></span>
+</div>
+
 <div id="statusbar">
   <span id="status-text">Chargement...</span>
   <div id="progress-wrap"><div id="progress-bar"></div></div>
-  <span id="status-count" style="white-space:nowrap"></span>
 </div>
+
 <div id="map"></div>
 
 <button id="legend-toggle" onclick="toggleLegend()">📋 Légende</button>
@@ -85,23 +131,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <script>
 
-// ── URL du fichier JSON sur GitHub ────────────────────────────────────────────
-// Le fichier campings_europe_cache.json est dans votre dépôt GitHub
 const DATA_URL = './campings_europe_cache.json';
 
-// ── Couleurs marqueurs ────────────────────────────────────────────────────────
+// ── État des filtres ──────────────────────────────────────────────────────────
+const filters = { site:'all', stars:'all', municipal:false };
+let allCampings = [];
+
+// ── Couleurs ──────────────────────────────────────────────────────────────────
 function getColorKey(stars, operator) {
   const op = (operator||'').toLowerCase();
   if (['municipal','commune','mairie','gemeinde','ayuntamiento'].some(k=>op.includes(k))) return 'municipal';
   return {'1':'s1','2':'s2','3':'s3','4':'s4','5':'s5'}[String(stars||'').trim()] || 'none';
 }
-const HEX = {
-  municipal:'#2ca02c', s1:'#c8b400', s2:'#f57c00',
-  s3:'#d32f2f', s4:'#7b1a1a', s5:'#222222', none:'#aaaaaa'
-};
+const HEX = { municipal:'#2ca02c', s1:'#c8b400', s2:'#f57c00', s3:'#d32f2f', s4:'#7b1a1a', s5:'#222222', none:'#aaaaaa' };
 
 function makeIcon(ck) {
-  const hex = HEX[ck] || '#aaa';
+  const hex = HEX[ck]||'#aaa';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="28" height="40">
     <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z"
           fill="${hex}" stroke="white" stroke-width="1.5"/>
@@ -110,116 +155,158 @@ function makeIcon(ck) {
 }
 
 function makePopup(c) {
-  // Compatible avec les deux formats : cache OSM et cache Windows
   const name     = c.name     || c.Name     || 'Camping sans nom';
   const website  = c.website  || c.Website  || '';
   const phone    = c.phone    || c.Phone    || '';
   const stars    = c.stars    || c.Stars    || '';
   const operator = c.operator || c.Operator || c.Category || '';
   const city     = c.city     || c.City     || '';
-  const address  = c.address  || c.Address  || '';
   const capacite = c.capacite || c.Capacity || '';
+  const starsN   = parseInt(stars)||0;
 
-  const starsHtml = stars && !isNaN(parseInt(stars))
-    ? `<span class="popup-stars">${'⭐'.repeat(Math.min(parseInt(stars),5))}</span><br>` : '';
-  const siteHtml = website
+  const starsHtml = starsN > 0 ? `<span class="popup-stars">${'⭐'.repeat(Math.min(starsN,5))}</span><br>` : '';
+  const siteHtml  = website
     ? `<a href="${website.startsWith('http')?website:'https://'+website}" target="_blank" class="popup-btn">🌐 Visiter le site</a>`
     : `<span class="popup-muted">🚫 Pas de site disponible</span>`;
-  const telHtml = phone
+  const telHtml   = phone
     ? `<a href="tel:${phone}" style="color:#1D9E75;font-size:12px">📞 ${phone}</a>`
     : `<span class="popup-muted">📞 Téléphone non renseigné</span>`;
-  const cityHtml    = city     ? `<span class="popup-muted">📍 ${city}</span><br>`              : '';
-  const addressHtml = address  ? `<span class="popup-muted">🏠 ${address}</span><br>`           : '';
-  const capHtml     = capacite ? `<span class="popup-muted">🏕 ${capacite} emplacements</span>` : '';
 
   return `<div class="camping-popup">
     <b>${name}</b><br>
     ${starsHtml}
-    ${operator ? `<span class="popup-muted">${operator}</span><br>` : ''}
-    ${cityHtml}${addressHtml}
+    ${operator?`<span class="popup-muted">${operator}</span><br>`:''}
+    ${city?`<span class="popup-muted">📍 ${city}</span><br>`:''}
     <hr>${siteHtml}<br>${telHtml}
-    ${capHtml ? '<br>'+capHtml : ''}
+    ${capacite?`<br><span class="popup-muted">🏕 ${capacite} empl.</span>`:''}
   </div>`;
 }
 
-// ── Carte Leaflet ─────────────────────────────────────────────────────────────
-const map = L.map('map', {zoomControl:true}).setView([48.0, 10.0], 5);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom:19
-}).addTo(map);
+// ── Normalisation d'un camping ────────────────────────────────────────────────
+function normalize(c) {
+  return {
+    name    : c.name     || c.Name     || 'Camping sans nom',
+    lat     : c.lat      || c.Latitude,
+    lon     : c.lon      || c.Longitude,
+    website : c.website  || c.Website  || '',
+    phone   : c.phone    || c.Phone    || '',
+    stars   : c.stars    || c.Stars    || '',
+    operator: c.operator || c.Operator || c.Category || '',
+    city    : c.city     || c.City     || '',
+    capacite: c.capacite || c.Capacity || '',
+  };
+}
 
+// ── Filtrage ──────────────────────────────────────────────────────────────────
+function applyFilters() {
+  return allCampings.filter(c => {
+    // Filtre site web
+    if (filters.site === 'yes' && !c.website) return false;
+    if (filters.site === 'no'  &&  c.website) return false;
+
+    // Filtre étoiles
+    if (filters.stars !== 'all' && String(c.stars).trim() !== filters.stars) return false;
+
+    // Filtre municipal
+    if (filters.municipal) {
+      const op = (c.operator||'').toLowerCase();
+      const isMunicipal = ['municipal','commune','mairie','gemeinde','ayuntamiento'].some(k=>op.includes(k));
+      if (!isMunicipal) return false;
+    }
+    return true;
+  });
+}
+
+// ── Carte ─────────────────────────────────────────────────────────────────────
+const map = L.map('map',{zoomControl:true}).setView([48.0,10.0],5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19
+}).addTo(map);
 const cluster = L.markerClusterGroup({maxClusterRadius:60, disableClusteringAtZoom:12});
 map.addLayer(cluster);
 
-// ── Affichage des marqueurs ───────────────────────────────────────────────────
-function displayCampings(campings) {
+// ── Affichage avec filtres ────────────────────────────────────────────────────
+function renderMap() {
   cluster.clearLayers();
+  const filtered = applyFilters();
+  const total    = filtered.length;
   let done = 0;
-  const total = campings.length;
 
-  // Ajout par lots pour ne pas bloquer l'interface
+  document.getElementById('filter-count').textContent = total + ' camping' + (total>1?'s':'');
+  document.getElementById('legend-count').textContent = total + ' campings affichés';
+
   function addBatch(start) {
-    const end = Math.min(start + 500, total);
-    for (let i = start; i < end; i++) {
-      const c = campings[i];
-      const lat = c.lat || c.Latitude;
-      const lon = c.lon || c.Longitude;
-      if (!lat || !lon) continue;
-      const stars    = c.stars    || c.Stars    || '';
-      const operator = c.operator || c.Operator || c.Category || '';
-      L.marker([lat, lon], {icon: makeIcon(getColorKey(stars, operator))})
-        .bindPopup(makePopup(c), {maxWidth:260})
-        .bindTooltip(c.name || c.Name || '', {direction:'top'})
+    const end = Math.min(start+500, total);
+    for (let i=start; i<end; i++) {
+      const c = filtered[i];
+      if (!c.lat || !c.lon) continue;
+      L.marker([c.lat,c.lon], {icon:makeIcon(getColorKey(c.stars,c.operator))})
+        .bindPopup(makePopup(c),{maxWidth:260})
+        .bindTooltip(c.name,{direction:'top'})
         .addTo(cluster);
     }
     done = end;
-    const pct = Math.round((done/total)*100);
-    document.getElementById('progress-bar').style.width = pct + '%';
-    document.getElementById('status-count').textContent = done + ' / ' + total;
-
-    if (done < total) {
-      setTimeout(() => addBatch(done), 0);
-    } else {
-      // Terminé
-      document.getElementById('status-text').textContent = `✅ ${total} campings chargés`;
-      document.getElementById('status-count').textContent = total + ' campings';
-      document.getElementById('legend-count').textContent = total + ' campings au total';
-      hideSplash();
-    }
+    if (done < total) setTimeout(()=>addBatch(done), 0);
   }
   addBatch(0);
 }
 
-// ── Chargement du fichier JSON ────────────────────────────────────────────────
+// ── Gestion des filtres ───────────────────────────────────────────────────────
+function setFilter(type, value) {
+  filters[type] = value;
+
+  // Mise à jour boutons site
+  if (type === 'site') {
+    ['all','yes','no'].forEach(v => {
+      document.getElementById('f-site-'+v).classList.toggle('active', v===value);
+    });
+  }
+  // Mise à jour boutons étoiles
+  if (type === 'stars') {
+    ['all','1','2','3','4','5'].forEach(v => {
+      document.getElementById('f-stars-'+v).classList.toggle('active', v===value);
+    });
+  }
+  renderMap();
+}
+
+function toggleMunicipal() {
+  filters.municipal = !filters.municipal;
+  document.getElementById('f-municipal').classList.toggle('active', filters.municipal);
+  // Si municipal activé, désactiver le filtre étoiles (incompatible)
+  if (filters.municipal && filters.stars !== 'all') {
+    setFilter('stars','all');
+  }
+  renderMap();
+}
+
+// ── Chargement ────────────────────────────────────────────────────────────────
 async function loadData() {
   try {
     document.getElementById('splash-msg').textContent = 'Téléchargement des données...';
-    document.getElementById('progress-bar').style.width = '20%';
+    document.getElementById('progress-bar').style.width = '30%';
 
     const resp = await fetch(DATA_URL + '?v=' + Date.now());
     if (!resp.ok) throw new Error('Fichier non trouvé (HTTP ' + resp.status + ')');
 
-    document.getElementById('splash-msg').textContent = 'Lecture des données...';
-    document.getElementById('progress-bar').style.width = '50%';
-
+    document.getElementById('progress-bar').style.width = '60%';
     const raw = await resp.json();
+    const list = Array.isArray(raw) ? raw : (raw.campings || []);
+    if (list.length === 0) throw new Error('Aucun camping dans le fichier.');
 
-    // Compatible cache Windows ({"timestamp":..., "campings":[...]}) et liste directe
-    const campings = Array.isArray(raw) ? raw : (raw.campings || []);
+    allCampings = list.map(normalize).filter(c => c.lat && c.lon);
 
-    if (campings.length === 0) throw new Error('Aucun camping dans le fichier.');
+    document.getElementById('splash-msg').textContent = `Affichage de ${allCampings.length} campings...`;
+    document.getElementById('progress-bar').style.width = '80%';
+    document.getElementById('status-text').textContent  = `✅ ${allCampings.length} campings chargés`;
 
-    document.getElementById('splash-msg').textContent = `Affichage de ${campings.length} campings...`;
-    document.getElementById('progress-bar').style.width = '70%';
-    document.getElementById('status-text').textContent = `Affichage de ${campings.length} campings...`;
-
-    displayCampings(campings);
+    renderMap();
+    hideSplash();
 
   } catch(err) {
     hideSplash();
     document.getElementById('error-msg').textContent = err.message;
     document.getElementById('error-box').style.display = 'flex';
-    console.error(err);
   }
 }
 
@@ -228,9 +315,8 @@ function hideSplash() {
   const s = document.getElementById('splash');
   s.style.transition = 'opacity .5s';
   s.style.opacity = '0';
-  setTimeout(() => s.style.display = 'none', 500);
+  setTimeout(()=>s.style.display='none', 500);
 }
-
 let legendVisible = false;
 function toggleLegend() {
   legendVisible = !legendVisible;
@@ -238,14 +324,8 @@ function toggleLegend() {
   document.getElementById('legend-toggle').style.display = legendVisible ? 'none'  : 'block';
 }
 
-// ── Service Worker ────────────────────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
-}
-
-// ── Démarrage ─────────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 document.addEventListener('DOMContentLoaded', loadData);
-
 </script>
 </body>
 </html>
